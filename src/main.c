@@ -5,13 +5,13 @@
 #include "freertos/task.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
+#include "srom.h"
 
 //pin definitions
 #define SCLK_PIN        13
 #define MOSI_PIN        11
 #define NCS_PIN         10
 #define MISO_PIN        12
-
 //sensor register definitions
 #define Product_ID          0x00
 #define Revision_ID         0x01
@@ -25,7 +25,6 @@ spi_device_handle_t spi2;
 
 //function to initialize Serial Peripherals Interface
 static void spi_init(){
-    //error return
     esp_err_t ret;
 
     //SPI bus configuration
@@ -37,7 +36,6 @@ static void spi_init(){
         .quadwp_io_num = -1,
         .max_transfer_sz = 16,    
     };
-    //check for errors on initializing bus with above configs
     ret = spi_bus_initialize(SPI2_HOST, &bus_config, SPI_DMA_CH_AUTO);
     ESP_ERROR_CHECK(ret);
 
@@ -55,7 +53,6 @@ static void spi_init(){
         .post_cb = NULL,
         .input_delay_ns = 0,
     };
-    //check for errors initializing device 
     ESP_ERROR_CHECK(spi_bus_add_device(SPI2_HOST, &device_config, &spi2));
 }
 
@@ -63,18 +60,13 @@ static void spi_init(){
 static uint8_t spiRead(uint8_t reg){
     uint8_t txdata = reg;
     uint8_t rxdata;
-
-    //create send address transaction
     spi_transaction_t t1 = {
         .length = 8,
         .tx_buffer = &txdata,
         .rx_buffer = NULL,
     };
-    //send&receive
     gpio_set_level(NCS_PIN, 0);
     ESP_ERROR_CHECK(spi_device_polling_transmit(spi2, &t1));
-
-    //create send data transaction
     spi_transaction_t t2 = {
         .length = 8,
         .rx_buffer = &rxdata,
@@ -90,22 +82,65 @@ static uint8_t spiRead(uint8_t reg){
 //function to write from a register
 static void spiWrite(uint8_t reg, uint8_t value){
     uint8_t txdata[2] = {reg, value};
-
-    //create a write to a register transaction
     spi_transaction_t t = {
         .tx_buffer = txdata,
+        .rx_buffer = NULL,
         .length = 16,
     };
-    //write
     gpio_set_level(NCS_PIN, 0);
     ESP_ERROR_CHECK(spi_device_polling_transmit(spi2, &t));
     gpio_set_level(NCS_PIN, 1);
 }
 
 //Initialize the motion sensor
-//static void PAW3389_init(const uint8_t DPI){
+static void PAW3389_init(const uint8_t DPI){
+    const uint8_t *psrom = srom;
+    gpio_set_level(NCS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(3));
 
-//}
+    //shutdown first
+    gpio_set_level(NCS_PIN, 0);
+    spiWrite(0x3b, 0xb6);
+    gpio_set_level(NCS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    //reset SPI port
+    gpio_set_level(NCS_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    gpio_set_level(NCS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(1));
+
+    //power up reset
+    gpio_set_level(NCS_PIN, 0);
+    spiWrite(0x3a, 0x5a);
+    gpio_set_level(NCS_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(30));
+
+    //SROM download enable
+    spiWrite(0x10, 0x20);
+    spiWrite(0x13, 0x1d);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    spiWrite(0x13, 0x18);
+    //SROM data write
+    spi_transaction_t srom_burst = {
+        .addr = 0x62,
+        .length = 4096,
+        .rx_buffer = NULL,
+        .tx_buffer = psrom++,
+    };
+    gpio_set_level(NCS_PIN, 0);
+    for (uint16_t i = 0; i < SROM_LENGTH; i++){
+        ESP_ERROR_CHECK(spi_device_polling_transmit(spi2, &srom_burst));
+    }
+    gpio_set_level(NCS_PIN, 1);
+
+    //read from 0x02 to 0x06
+    spiRead(0x02);
+    spiRead(0x03);
+    spiRead(0x04);
+    spiRead(0x05);
+    spiRead(0x06);
+}
 
 void app_main() 
 {   //gpio acting as NCS pin
@@ -123,6 +158,6 @@ void app_main()
 
     //loop forever part
     while (1){
-        spiWrite(0x3b, 0x01);
+        
     }
 }
