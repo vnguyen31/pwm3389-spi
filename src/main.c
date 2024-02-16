@@ -88,7 +88,7 @@ static void spi_init(){
         .address_bits = 0,
         .dummy_bits = 0,
         .duty_cycle_pos = 128,
-        .clock_speed_hz = 4000000,
+        .clock_speed_hz = 16000000,
         .mode = 3,
         .spics_io_num = -1,
         .queue_size = 1,
@@ -182,9 +182,9 @@ static void PMW3389_init(const uint8_t DPI){
     ESP_ERROR_CHECK(spi_device_polling_transmit(spi2, &sromaddress));
     //SROM data send
     spi_transaction_t sromdata = {
-        .length = 4094,
+        .length = 4094*8,
         .rx_buffer = NULL,
-        .tx_buffer = &srom[i],
+        .tx_buffer = srom,
     };
     for (i = 0; i < SROM_LENGTH; i++){
         ESP_ERROR_CHECK(spi_device_polling_transmit(spi2, &sromdata));
@@ -217,9 +217,9 @@ void app_main()
     PMW3389_init(15);
 
     while (1){
-        uint8_t deltaxl = spiRead(Delta_X_L);
-        uint8_t sromid = spiRead(SROM_ID);
-        printf("sromid: %d \t deltax: %d\n", sromid, deltaxl);
         vTaskDelay(pdMS_TO_TICKS(1000));
+        uint8_t sromid = spiRead(SROM_ID);
+        printf("productID: %d\n", sromid);
+        
     }
 }
