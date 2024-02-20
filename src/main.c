@@ -77,9 +77,9 @@ static void spi_init(){
         .sclk_io_num = SCLK_PIN,
         .quadhd_io_num = -1,
         .quadwp_io_num = -1,
-        .max_transfer_sz = 4094,    
+        .max_transfer_sz = 4095,    
     };
-    ret = spi_bus_initialize(SPI2_HOST, &bus_config, SPI_DMA_CH_AUTO);
+    ret = spi_bus_initialize(SPI2_HOST, &bus_config, 3);
     ESP_ERROR_CHECK(ret);
 
     //SPI device configuration
@@ -88,7 +88,7 @@ static void spi_init(){
         .address_bits = 0,
         .dummy_bits = 0,
         .duty_cycle_pos = 128,
-        .clock_speed_hz = 16000000,
+        .clock_speed_hz = 2000000,
         .mode = 3,
         .spics_io_num = -1,
         .queue_size = 1,
@@ -140,7 +140,7 @@ static void PMW3389_init(const uint8_t DPI){
     uint16_t i = 0;
     uint8_t sromburstaddress = SROM_Load_Burst;
     gpio_set_level(NCS_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(3));
+    vTaskDelay(pdMS_TO_TICKS(10));
 
     //shutdown first
     gpio_set_level(NCS_PIN, 0);
@@ -150,9 +150,9 @@ static void PMW3389_init(const uint8_t DPI){
 
     //reset SPI port
     gpio_set_level(NCS_PIN, 0);
-    vTaskDelay(pdMS_TO_TICKS(1));
+    vTaskDelay(pdMS_TO_TICKS(10));
     gpio_set_level(NCS_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(1));
+    vTaskDelay(pdMS_TO_TICKS(10));
 
     //power up reset
     gpio_set_level(NCS_PIN, 0);
@@ -171,6 +171,8 @@ static void PMW3389_init(const uint8_t DPI){
     spiWrite(0x10, 0x20);
     spiWrite(0x13, 0x1d);
     vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(NCS_PIN, 1);
+
     spiWrite(0x13, 0x18);
     //SROM address send
     spi_transaction_t sromaddress = {
@@ -191,7 +193,6 @@ static void PMW3389_init(const uint8_t DPI){
     }
     gpio_set_level(NCS_PIN, 1);
     vTaskDelay(pdMS_TO_TICKS(15));
-
     // configuration/settings
 	spiWrite(0x10, 0x00); // Rest mode & independant X/Y DPI disabled
 	spiWrite(0x0d, 0x00); // Camera angle
@@ -201,7 +202,7 @@ static void PMW3389_init(const uint8_t DPI){
 	spiWrite(0x63, 0x02); // LOD: 0x00 disable lift detection, 0x02 = 2mm, 0x03 = 3mm
 	spiWrite(0x2b, 0x10); // Minimum SQUAL for zero motion data (default: 0x10)
 	spiWrite(0x2c, 0x0a); // Minimum Valid features (reduce SQUAL score) (default: 0x0a)
-    vTaskDelay(pdMS_TO_TICKS(1));
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 void app_main() 
@@ -216,10 +217,13 @@ void app_main()
     //initialize PMW3389
     PMW3389_init(15);
 
+    uint8_t sromid = spiRead(SROM_ID);
+    printf("productID: %d\n", sromid);
+
     while (1){
         vTaskDelay(pdMS_TO_TICKS(1000));
-        uint8_t sromid = spiRead(SROM_ID);
-        printf("productID: %d\n", sromid);
+        uint8_t motion = spiRead(Delta_X_L);
+        printf("motion: %d", motion);
         
     }
 }
